@@ -16,6 +16,7 @@ canvas { background:#fff; border-radius:10px; padding:10px; }
 .latest-row { background:#d1ecf1 !important; font-weight:bold; }
 .alert-level { font-weight:bold; font-size:1.1rem; margin-top:10px; }
 .legend-table td, .legend-table th { vertical-align: middle; text-align:left; }
+.time-label { font-size:0.9rem; color:#555; margin-top:5px; }
 </style>
 </head>
 <body>
@@ -30,9 +31,13 @@ canvas { background:#fff; border-radius:10px; padding:10px; }
       <div class="card p-3 shadow-sm">
         <h5>📊 Biểu đồ dữ liệu cảm biến</h5>
         <canvas id="radarChart" height="120"></canvas>
+        <div id="radarTime" class="time-label"></div>
         <canvas id="tempChart" height="120" class="mt-3"></canvas>
+        <div id="tempTime" class="time-label"></div>
         <canvas id="humChart" height="120" class="mt-3"></canvas>
+        <div id="humTime" class="time-label"></div>
         <canvas id="rainChart" height="120" class="mt-3"></canvas>
+        <div id="rainTime" class="time-label"></div>
       </div>
     </div>
 
@@ -53,7 +58,7 @@ canvas { background:#fff; border-radius:10px; padding:10px; }
             <thead class="table-light">
               <tr>
                 <th>Seq</th><th>Radar</th><th>Temp</th><th>Humi</th>
-                <th>Rain</th><th>WaterLv</th><th>Alert</th>
+                <th>Rain</th><th>WaterLv</th><th>Alert</th><th>Thời gian</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -87,6 +92,7 @@ client.on('connect', ()=>{ console.log("MQTT connected"); client.subscribe('lora
 client.on('message', (topic,message)=>{
   try{
     const data = JSON.parse(message.toString());
+    data.time = new Date().toLocaleString(); // thêm thời gian nhận
     addPacket(data);
   }catch(e){ console.log("Invalid JSON:", e);}
 });
@@ -117,21 +123,25 @@ function updateUI(){
       <td>${p.seq}</td><td>${p.radar.toFixed(2)}</td><td>${p.temp.toFixed(2)}</td>
       <td>${p.hum.toFixed(2)}</td><td>${p.rain.toFixed(2)}</td><td>${p.waterLv}/8</td>
       <td><span class='badge ${badgeClass}'>${badgeText}</span></td>
+      <td>${p.time}</td>
     </tr>`;
   });
 
   // Biểu đồ
   const labels = packets.map(p=>p.seq);
-  radarChart.data.labels = labels;
-  radarChart.data.datasets[0].data = packets.map(p=>p.radar);
-  tempChart.data.labels = labels;
-  tempChart.data.datasets[0].data = packets.map(p=>p.temp);
-  humChart.data.labels = labels;
-  humChart.data.datasets[0].data = packets.map(p=>p.hum);
-  rainChart.data.labels = labels;
-  rainChart.data.datasets[0].data = packets.map(p=>p.rain);
-
+  radarChart.data.labels = labels; radarChart.data.datasets[0].data = packets.map(p=>p.radar);
+  tempChart.data.labels = labels; tempChart.data.datasets[0].data = packets.map(p=>p.temp);
+  humChart.data.labels = labels; humChart.data.datasets[0].data = packets.map(p=>p.hum);
+  rainChart.data.labels = labels; rainChart.data.datasets[0].data = packets.map(p=>p.rain);
   radarChart.update(); tempChart.update(); humChart.update(); rainChart.update();
+
+  // Hiển thị thời gian mới nhất dưới từng biểu đồ
+  if(packets[0]){
+    document.getElementById('radarTime').innerText = "Cập nhật: "+packets[0].time;
+    document.getElementById('tempTime').innerText = "Cập nhật: "+packets[0].time;
+    document.getElementById('humTime').innerText = "Cập nhật: "+packets[0].time;
+    document.getElementById('rainTime').innerText = "Cập nhật: "+packets[0].time;
+  }
 
   // Alert
   const alertSpan = document.getElementById('alertLevel');
