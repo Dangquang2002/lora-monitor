@@ -100,12 +100,17 @@ const tempChart = createChart(document.getElementById('tempChart').getContext('2
 const humChart = createChart(document.getElementById('humChart').getContext('2d'),'Humidity (%)','#28a745');
 const rainChart = createChart(document.getElementById('rainChart').getContext('2d'),'Rain (mm)','#fd7e14');
 
-// MQTT setup
-const client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
-client.on('connect', () => { console.log("MQTT connected"); client.subscribe('lora_data'); });
+// --- MQTT WebSocket connection ---
+const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+client.on('connect', () => {
+  console.log("MQTT connected via WebSocket");
+  client.subscribe('lora_data');
+});
 client.on('message', (topic, message) => {
-  const data = JSON.parse(message.toString());
-  addPacket(data);
+  try{
+    const data = JSON.parse(message.toString());
+    addPacket(data);
+  }catch(e){ console.log("Invalid JSON:", e);}
 });
 
 function addPacket(p){
