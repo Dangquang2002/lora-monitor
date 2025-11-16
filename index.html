@@ -26,7 +26,6 @@ canvas { background:#fff; border-radius:10px; padding:10px; }
   </div>
 
   <div class="row">
-    <!-- Biểu đồ bên trái -->
     <div class="col-lg-8">
       <div class="card p-3 shadow-sm">
         <h5>📊 Biểu đồ dữ liệu cảm biến</h5>
@@ -35,25 +34,8 @@ canvas { background:#fff; border-radius:10px; padding:10px; }
         <canvas id="humChart" height="120" class="mt-3"></canvas>
         <canvas id="rainChart" height="120" class="mt-3"></canvas>
       </div>
-
-      <!-- Bảng giải thích mức độ nguy hiểm -->
-      <div class="card p-3 shadow-sm">
-        <h5>📝 Bảng mức độ nguy hiểm lũ</h5>
-        <table class="table table-bordered table-striped legend-table">
-          <thead class="table-light">
-            <tr><th>Mức cảnh báo</th><th>Mô tả</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><span class="badge bg-success">1</span></td><td>Nguy cơ thấp: Chỉ số mưa & mực nước bình thường.</td></tr>
-            <tr><td><span class="badge bg-warning text-dark">2</span></td><td>Nguy cơ trung bình: Cần theo dõi các mạch nước và mưa lớn.</td></tr>
-            <tr><td><span class="badge bg-orange text-dark">3</span></td><td>Nguy cơ cao: Mực nước tăng, khả năng lũ cục bộ.</td></tr>
-            <tr><td><span class="badge bg-danger">4</span></td><td>Nguy cơ rất cao: Lũ lớn, cần cảnh báo và chuẩn bị di tản.</td></tr>
-          </tbody>
-        </table>
-      </div>
     </div>
 
-    <!-- Cảnh báo + bảng dữ liệu bên phải -->
     <div class="col-lg-4">
       <div class="card p-3 shadow-sm">
         <h5>⚠️ Cảnh báo & dự báo</h5>
@@ -84,13 +66,13 @@ canvas { background:#fff; border-radius:10px; padding:10px; }
 
 <script>
 const MAX_PACKETS = 50;
-let packets=[];
+let packets = [];
 
 function createChart(ctx,label,color){
   return new Chart(ctx,{
     type:'line',
-    data:{labels:[],datasets:[{label:label,data:[],borderColor:color,backgroundColor:color+'33',fill:true,tension:0.3}]},
-    options:{responsive:true,animation:false,scales:{y:{beginAtZero:true}}}
+    data:{labels:[], datasets:[{label:label, data:[], borderColor:color, backgroundColor:color+'33', fill:true, tension:0.3}]},
+    options:{responsive:true, animation:false, scales:{y:{beginAtZero:true}}}
   });
 }
 
@@ -99,13 +81,10 @@ const tempChart = createChart(document.getElementById('tempChart').getContext('2
 const humChart = createChart(document.getElementById('humChart').getContext('2d'),'Humidity (%)','#28a745');
 const rainChart = createChart(document.getElementById('rainChart').getContext('2d'),'Rain (mm)','#fd7e14');
 
-// --- MQTT WebSocket connection ---
+// MQTT WebSocket
 const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-client.on('connect', () => {
-  console.log("MQTT connected via WebSocket");
-  client.subscribe('lora_data');
-});
-client.on('message', (topic, message) => {
+client.on('connect', ()=>{ console.log("MQTT connected"); client.subscribe('lora_data'); });
+client.on('message', (topic,message)=>{
   try{
     const data = JSON.parse(message.toString());
     addPacket(data);
@@ -113,17 +92,17 @@ client.on('message', (topic, message) => {
 });
 
 function addPacket(p){
-  packets.unshift(p); // thêm mới nhất lên đầu
+  packets.unshift(p); // mới nhất lên đầu
   if(packets.length>MAX_PACKETS) packets.pop();
   updateUI();
 }
 
 function updateUI(){
-  const tbody=document.querySelector('#packetTable tbody');
-  tbody.innerHTML='';
+  const tbody = document.querySelector('#packetTable tbody');
+  tbody.innerHTML = '';
   let lastAlert = 0;
 
-  // cập nhật bảng, dòng mới nhất trên cùng
+  // Bảng
   packets.forEach((p,i)=>{
     let badgeClass, badgeText;
     switch(p.alert){
@@ -141,8 +120,8 @@ function updateUI(){
     </tr>`;
   });
 
-  // cập nhật biểu đồ
-  const labels = packets.map((p,i)=>p.seq);
+  // Biểu đồ
+  const labels = packets.map(p=>p.seq);
   radarChart.data.labels = labels;
   radarChart.data.datasets[0].data = packets.map(p=>p.radar);
   tempChart.data.labels = labels;
@@ -154,10 +133,10 @@ function updateUI(){
 
   radarChart.update(); tempChart.update(); humChart.update(); rainChart.update();
 
-  // cập nhật alert
+  // Alert
   const alertSpan = document.getElementById('alertLevel');
-  alertSpan.className = 'badge ';
-  let forecastText = "Không có nguy cơ";
+  alertSpan.className='badge ';
+  let forecastText="Không có nguy cơ";
   switch(lastAlert){
     case 1: alertSpan.classList.add('bg-success'); forecastText="Nguy cơ thấp"; break;
     case 2: alertSpan.classList.add('bg-warning','text-dark'); forecastText="Nguy cơ trung bình"; break;
