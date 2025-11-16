@@ -84,13 +84,12 @@ canvas { background:#fff; border-radius:10px; padding:10px; }
 
 <script>
 const MAX_PACKETS = 50;
-let radarData=[], tempData=[], humData=[], rainData=[], labels=[];
 let packets=[];
 
 function createChart(ctx,label,color){
   return new Chart(ctx,{
     type:'line',
-    data:{labels:labels,datasets:[{label:label,data:[],borderColor:color,backgroundColor:color+'33',fill:true,tension:0.3}]},
+    data:{labels:[],datasets:[{label:label,data:[],borderColor:color,backgroundColor:color+'33',fill:true,tension:0.3}]},
     options:{responsive:true,animation:false,scales:{y:{beginAtZero:true}}}
   });
 }
@@ -114,16 +113,17 @@ client.on('message', (topic, message) => {
 });
 
 function addPacket(p){
-  packets.push(p);
-  if(packets.length>MAX_PACKETS) packets.shift();
+  packets.unshift(p); // thêm mới nhất lên đầu
+  if(packets.length>MAX_PACKETS) packets.pop();
   updateUI();
 }
 
 function updateUI(){
-  // Update table
   const tbody=document.querySelector('#packetTable tbody');
   tbody.innerHTML='';
   let lastAlert = 0;
+
+  // cập nhật bảng, dòng mới nhất trên cùng
   packets.forEach((p,i)=>{
     let badgeClass, badgeText;
     switch(p.alert){
@@ -134,22 +134,27 @@ function updateUI(){
       default: badgeClass='bg-secondary'; badgeText=p.alert; break;
     }
     lastAlert = p.alert;
-    tbody.innerHTML+=`<tr ${i===packets.length-1?'class="latest-row"':''}>
+    tbody.innerHTML+=`<tr ${i===0?'class="latest-row"':''}>
       <td>${p.seq}</td><td>${p.radar.toFixed(2)}</td><td>${p.temp.toFixed(2)}</td>
       <td>${p.hum.toFixed(2)}</td><td>${p.rain.toFixed(2)}</td><td>${p.waterLv}/8</td>
       <td><span class='badge ${badgeClass}'>${badgeText}</span></td>
     </tr>`;
   });
 
-  // Update charts
-  labels.length=0; radarData.length=0; tempData.length=0; humData.length=0; rainData.length=0;
-  packets.forEach((p,i)=>{
-    labels.push(i+1);
-    radarData.push(p.radar); tempData.push(p.temp); humData.push(p.hum); rainData.push(p.rain);
-  });
+  // cập nhật biểu đồ
+  const labels = packets.map((p,i)=>p.seq);
+  radarChart.data.labels = labels;
+  radarChart.data.datasets[0].data = packets.map(p=>p.radar);
+  tempChart.data.labels = labels;
+  tempChart.data.datasets[0].data = packets.map(p=>p.temp);
+  humChart.data.labels = labels;
+  humChart.data.datasets[0].data = packets.map(p=>p.hum);
+  rainChart.data.labels = labels;
+  rainChart.data.datasets[0].data = packets.map(p=>p.rain);
+
   radarChart.update(); tempChart.update(); humChart.update(); rainChart.update();
 
-  // Update alert
+  // cập nhật alert
   const alertSpan = document.getElementById('alertLevel');
   alertSpan.className = 'badge ';
   let forecastText = "Không có nguy cơ";
@@ -163,9 +168,8 @@ function updateUI(){
   alertSpan.innerText = lastAlert;
   document.getElementById('forecastText').innerText = forecastText;
 
-  // Update totals
   document.getElementById('totalReceived').innerText = packets.length;
-  document.getElementById('totalLost').innerText = 0; // Không tính mất gói MQTT ở client
+  document.getElementById('totalLost').innerText = 0;
   document.getElementById('lossPercent').innerText = 0;
 }
 </script>
