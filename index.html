@@ -3,207 +3,94 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🌊 Hệ thống phát hiện và cảnh báo tránh lũ sớm</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<title>Realtime GPS Tracking</title>
 <style>
-body { background:#f8f9fa; color:#333; font-family:'Segoe UI', sans-serif; padding:20px; }
-h2 { color:#007bff; }
-.card { border-radius:15px; margin-bottom:20px; }
-canvas { background:#fff; border-radius:10px; padding:10px; }
-.badge { font-size:1rem; }
-.latest-row { background:#d1ecf1 !important; font-weight:bold; }
-.alert-level { font-weight:bold; font-size:1.1rem; margin-top:10px; }
-.legend-table td, .legend-table th { vertical-align: middle; text-align:left; }
-.time-label { font-size:0.9rem; color:#555; margin-top:5px; }
-.alert-detail { margin-top:10px; font-weight:bold; color:#dc3545; }
+  body, html { margin:0; padding:0; height:100%; }
+  #map { width: 100%; height: 100%; }
+  #info {
+    position: absolute;
+    top: 10px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.9);
+    padding: 10px 20px;
+    font-family: sans-serif;
+    font-size: 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 5px #333;
+    z-index: 10;
+  }
 </style>
 </head>
 <body>
-<div class="container-fluid">
-  <div class="text-center mb-4">
-    <h2>🌊 Hệ thống phát hiện và cảnh báo tránh lũ sớm</h2>
-    <p class="text-muted">Realtime monitoring - LoRa Sensor</p>
-  </div>
 
-  <div class="row">
-    <!-- Biểu đồ bên trái -->
-    <div class="col-lg-8">
-      <div class="card p-3 shadow-sm">
-        <h5>📊 Biểu đồ dữ liệu cảm biến</h5>
-        <canvas id="radarChart" height="150"></canvas>
-        <div id="radarTime" class="time-label">Cập nhật: --</div>
-        <canvas id="tempChart" height="150" class="mt-3"></canvas>
-        <div id="tempTime" class="time-label">Cập nhật: --</div>
-        <canvas id="humChart" height="150" class="mt-3"></canvas>
-        <div id="humTime" class="time-label">Cập nhật: --</div>
-        <canvas id="rainChart" height="150" class="mt-3"></canvas>
-        <div id="rainTime" class="time-label">Cập nhật: --</div>
-      </div>
+<div id="info">Chờ dữ liệu GPS...</div>
+<div id="map"></div>
 
-      <!-- Bảng mức độ nguy hiểm -->
-      <div class="card p-3 shadow-sm mt-3">
-        <h5>📝 Bảng mức độ nguy hiểm lũ</h5>
-        <table class="table table-bordered table-striped legend-table">
-          <thead class="table-light">
-            <tr><th>Mức cảnh báo</th><th>Mô tả</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><span class="badge bg-success">1</span></td><td>Nguy cơ thấp: Chỉ số mưa & mực nước bình thường.</td></tr>
-            <tr><td><span class="badge bg-warning text-dark">2</span></td><td>Nguy cơ trung bình: Cần theo dõi các mạch nước và mưa lớn.</td></tr>
-            <tr><td><span class="badge bg-orange text-dark">3</span></td><td>Nguy cơ cao: Mực nước tăng, khả năng lũ cục bộ.</td></tr>
-            <tr><td><span class="badge bg-danger">4</span></td><td>Nguy cơ rất cao: Lũ lớn, cần cảnh báo và chuẩn bị di tản.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Cảnh báo & bảng dữ liệu bên phải -->
-    <div class="col-lg-4">
-      <div class="card p-3 shadow-sm">
-        <h5>⚠️ Cảnh báo & dự báo</h5>
-        <div class="mb-2">
-          <strong>Total Received:</strong> <span id="totalReceived">0</span><br>
-          <strong>Total Lost:</strong> <span id="totalLost">0</span><br>
-          <strong>Packet Loss (%):</strong> <span id="lossPercent">0</span><br>
-        </div>
-        <h6>Mức cảnh báo cuối cùng:</h6>
-        <span id="alertLevel" class="badge bg-success">0</span>
-        <div class="alert-level text-primary" id="forecastText">Không có nguy cơ</div>
-        <div class="alert-detail" id="alertDetail">---</div>
-
-        <div class="table-responsive mt-3">
-          <table class="table table-striped table-bordered table-sm" id="packetTable">
-            <thead class="table-light">
-              <tr>
-                <th>Seq</th><th>Radar</th><th>Temp</th><th>Humi</th>
-                <th>Rain</th><th>WaterLv</th><th>Alert</th><th>Thời gian</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
+<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY"></script>
 <script>
-const MAX_PACKETS = 50;
-let packets = [];
+let map;
+let marker;
+let infoDiv = document.getElementById('info');
 
-function createChart(ctx,label,color){
-  return new Chart(ctx,{
-    type:'line',
-    data:{labels:[], datasets:[{label:label, data:[], borderColor:color, backgroundColor:color+'33', fill:true, tension:0.4, pointRadius:2}]},
-    options:{responsive:true, animation:{duration:200}, scales:{y:{beginAtZero:true}}}
-  });
+// Khởi tạo map
+function initMap() {
+    const initialPos = { lat: 20.93, lng: 105.70 }; // vị trí mặc định
+    map = new google.maps.Map(document.getElementById('map'), {
+        center: initialPos,
+        zoom: 15
+    });
+    marker = new google.maps.Marker({
+        position: initialPos,
+        map: map,
+        title: "Thiết bị GPS"
+    });
 }
 
-const radarChart = createChart(document.getElementById('radarChart').getContext('2d'),'Radar (m/s)','#007bff');
-const tempChart = createChart(document.getElementById('tempChart').getContext('2d'),'Temp (°C)','#dc3545');
-const humChart = createChart(document.getElementById('humChart').getContext('2d'),'Humidity (%)','#28a745');
-const rainChart = createChart(document.getElementById('rainChart').getContext('2d'),'Rain (mm)','#fd7e14');
+initMap();
 
-// MQTT WebSocket
-const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-client.on('connect', ()=>{ console.log("MQTT connected"); client.subscribe('lora_data'); });
-client.on('message', (topic,message)=>{
-  try{
-    const data = JSON.parse(message.toString());
-    data.time = new Date().toLocaleString();
-    addPacket(data);
-  }catch(e){ console.log("Invalid JSON:", e);}
-});
+// ==== Kết nối WebSocket để nhận GPS realtime ====
+let ws = new WebSocket("wss://YOUR_SERVER_ADDRESS"); // thay bằng server của bạn
 
-function addPacket(p){
-  packets.unshift(p); // mới nhất lên đầu
-  if(packets.length>MAX_PACKETS) packets.pop();
-  updateUI();
-}
+ws.onopen = () => {
+    console.log("WebSocket connected");
+};
 
-function updateUI(){
-  const tbody = document.querySelector('#packetTable tbody');
-  tbody.innerHTML = '';
-  let lastAlert = 0;
+ws.onmessage = (event) => {
+    try {
+        // Server gửi dữ liệu JSON: { "lat":20.93, "lon":105.70, "time":"11:03:48" }
+        const data = JSON.parse(event.data);
+        const lat = parseFloat(data.lat);
+        const lon = parseFloat(data.lon);
 
-  // Bảng dữ liệu
-  packets.forEach((p,i)=>{
-    let badgeClass, badgeText;
-    switch(p.alert){
-      case 1: badgeClass='bg-success'; badgeText='1'; break;
-      case 2: badgeClass='bg-warning text-dark'; badgeText='2'; break;
-      case 3: badgeClass='bg-orange text-dark'; badgeText='3'; break;
-      case 4: badgeClass='bg-danger'; badgeText='4'; break;
-      default: badgeClass='bg-secondary'; badgeText=p.alert; break;
+        if (!isNaN(lat) && !isNaN(lon)) {
+            const pos = { lat: lat, lng: lon };
+            marker.setPosition(pos);
+            map.panTo(pos);
+            infoDiv.textContent = `Vị trí: ${lat.toFixed(6)}, ${lon.toFixed(6)} | Thời gian: ${data.time}`;
+        }
+    } catch(e) {
+        console.error("Dữ liệu không hợp lệ:", event.data);
     }
-    lastAlert = p.alert;
-    tbody.innerHTML+=`<tr ${i===0?'class="latest-row"':''}>
-      <td>${p.seq}</td><td>${p.radar.toFixed(2)}</td><td>${p.temp.toFixed(2)}</td>
-      <td>${p.hum.toFixed(2)}</td><td>${p.rain.toFixed(2)}</td><td>${p.waterLv}/8</td>
-      <td><span class='badge ${badgeClass}'>${badgeText}</span></td>
-      <td>${p.time}</td>
-    </tr>`;
-  });
+};
 
-  // Biểu đồ
-  const labels = packets.map(p=>p.seq);
-  radarChart.data.labels = labels; radarChart.data.datasets[0].data = packets.map(p=>p.radar);
-  tempChart.data.labels = labels; tempChart.data.datasets[0].data = packets.map(p=>p.temp);
-  humChart.data.labels = labels; humChart.data.datasets[0].data = packets.map(p=>p.hum);
-  rainChart.data.labels = labels; rainChart.data.datasets[0].data = packets.map(p=>p.rain);
-  radarChart.update(); tempChart.update(); humChart.update(); rainChart.update();
+ws.onclose = () => { console.log("WebSocket disconnected"); };
+ws.onerror = (err) => { console.error("WebSocket error:", err); };
 
-  // Thời gian mới nhất
-  if(packets[0]){
-    const timeLabel = "Cập nhật: " + packets[0].time;
-    document.getElementById('radarTime').innerText = timeLabel;
-    document.getElementById('tempTime').innerText = timeLabel;
-    document.getElementById('humTime').innerText = timeLabel;
-    document.getElementById('rainTime').innerText = timeLabel;
-  }
-
-  // Alert
-  const alertSpan = document.getElementById('alertLevel');
-  const alertDetail = document.getElementById('alertDetail');
-  alertSpan.className='badge ';
-  let forecastText="Không có nguy cơ";
-  switch(lastAlert){
-    case 1: 
-      alertSpan.classList.add('bg-success'); 
-      forecastText="Nguy cơ thấp"; 
-      alertDetail.innerText = "Theo dõi bình thường, không cần hành động."; 
-      break;
-    case 2: 
-      alertSpan.classList.add('bg-warning','text-dark'); 
-      forecastText="Nguy cơ trung bình"; 
-      alertDetail.innerText = "Theo dõi các mạch nước, chuẩn bị các phương án sơ tán nhỏ."; 
-      break;
-    case 3: 
-      alertSpan.classList.add('bg-orange','text-dark'); 
-      forecastText="Nguy cơ cao"; 
-      alertDetail.innerText = "Mực nước tăng, cảnh báo người dân, chuẩn bị di tản nếu cần."; 
-      break;
-    case 4: 
-      alertSpan.classList.add('bg-danger'); 
-      forecastText="Nguy cơ rất cao! Nguy hiểm!"; 
-      alertDetail.innerText = "Lũ lớn, cần cảnh báo người dân ngay lập tức và chuẩn bị di tản."; 
-      break;
-    default: 
-      alertSpan.classList.add('bg-secondary'); 
-      alertDetail.innerText = "---";
-      break;
-  }
-  alertSpan.innerText = lastAlert;
-  document.getElementById('forecastText').innerText = forecastText;
-
-  // Tổng quan
-  document.getElementById('totalReceived').innerText = packets.length;
-  document.getElementById('totalLost').innerText = 0;
-  document.getElementById('lossPercent').innerText = 0;
-}
+// ==== Nếu chưa có WebSocket, có thể thay bằng AJAX polling ====
+// setInterval(() => {
+//   fetch("https://your-server.com/latest-gps")
+//     .then(res => res.json())
+//     .then(data => {
+//         const lat = parseFloat(data.lat);
+//         const lon = parseFloat(data.lon);
+//         if (!isNaN(lat) && !isNaN(lon)) {
+//             const pos = { lat: lat, lng: lon };
+//             marker.setPosition(pos);
+//             map.panTo(pos);
+//             infoDiv.textContent = `Vị trí: ${lat.toFixed(6)}, ${lon.toFixed(6)} | Thời gian: ${data.time}`;
+//         }
+//     });
+// }, 5000); // polling 5 giây
 </script>
 </body>
 </html>
-
